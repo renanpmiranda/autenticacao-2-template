@@ -1,3 +1,4 @@
+import { HashManager } from './../services/HashManager';
 import express from "express"
 import { UserBusiness } from "../business/UserBusiness"
 import { UserController } from "../controller/UserController"
@@ -11,7 +12,8 @@ const userController = new UserController(
     new UserBusiness(
         new UserDatabase(),
         new IdGenerator(),
-        new TokenManager()
+        new TokenManager(),
+        new HashManager()
     )
 )
 
