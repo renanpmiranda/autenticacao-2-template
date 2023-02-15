@@ -1,3 +1,4 @@
+import { HashManager } from './../services/HashManager';
 import { UserDatabase } from "../database/UserDatabase"
 import { GetUsersInput, GetUsersOutput, LoginInput, LoginOutput, SignupInput, SignupOutput } from "../dtos/UserDTO"
 import { BadRequestError } from "../errors/BadRequestError"
@@ -11,14 +12,29 @@ export class UserBusiness {
     constructor(
         private userDatabase: UserDatabase,
         private idGenerator: IdGenerator,
-        private tokenManager: TokenManager
+        private tokenManager: TokenManager,
+        private hashManager: HashManager
     ) {}
 
     public getUsers = async (input: GetUsersInput): Promise<GetUsersOutput> => {
-        const { q } = input
+        const { q, token } = input
 
         if (typeof q !== "string" && q !== undefined) {
             throw new BadRequestError("'q' deve ser string ou undefined")
+        }
+
+        if (typeof token !== "string") {
+            throw new BadRequestError("'token' inválido. Deve ser uma string")
+        }
+
+        const payload = this.tokenManager.getPayload(token)
+
+        if (payload === null){
+            throw new BadRequestError("'token' inválido")
+        }
+
+        if(payload.role !== USER_ROLES.ADMIN){
+            throw new BadRequestError("Apenas usuários 'admin' têm acesso e essa funcionalidade")
         }
 
         const usersDB = await this.userDatabase.findUsers(q)
@@ -58,11 +74,13 @@ export class UserBusiness {
 
         const id = this.idGenerator.generate()
 
+        const hashedPassword = await this.hashManager.hash(password)
+
         const newUser = new User(
             id,
             name,
             email,
-            password,
+            hashedPassword,
             USER_ROLES.NORMAL,
             new Date().toISOString()
         )
@@ -103,9 +121,15 @@ export class UserBusiness {
             throw new NotFoundError("'email' não encontrado")
         }
 
-        if (password !== userDB.password) {
+        const passwordIsCorrect = await this.hashManager.compare(password, userDB.password)
+
+        if(!passwordIsCorrect){
             throw new BadRequestError("'email' ou 'password' incorretos")
         }
+
+        // if (password !== userDB.password) {
+        //     throw new BadRequestError("'email' ou 'password' incorretos")
+        // }
 
         const user = new User(
             userDB.id,
